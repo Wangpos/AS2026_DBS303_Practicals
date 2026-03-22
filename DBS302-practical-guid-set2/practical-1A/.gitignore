@@ -1,2 +1,5 @@
 # .gitignore the virtual environment folder
 venv/
+
+# txt files
+*.instruction.txt
