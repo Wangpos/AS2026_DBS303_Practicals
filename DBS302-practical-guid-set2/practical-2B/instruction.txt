@@ -1,0 +1,215 @@
+Practical–1B: Real-Time Analytics with Bitmaps and HyperLogLog
+1. Metadata
+AIM
+To implement real-time user analytics using Redis bitmaps for activity tracking and HyperLogLog for unique user counting.
+
+Objectives
+After completing Practical–1B, the student will be able to:
+
+Describe how Redis bitmaps and HyperLogLog work conceptually and their trade-offs.
+Implement daily active user tracking using bitmaps (SETBIT, GETBIT, BITCOUNT).
+Implement approximate unique visitor counting using HyperLogLog (PFADD, PFCOUNT).
+Design and code a small analytics service that exposes high-level methods for these metrics.
+Mapping to Module Outcomes
+DBS302 LO5: Assess performance implications of different NoSQL data structures.
+Unit II 2.3.1, 2.3.2: Bitmaps and HyperLogLog for analytics.
+2. Conceptual Overview
+2.1 Bitmaps
+A bitmap uses bits in a string to represent yes/no (binary) states, typically one bit per user or per event.
+Example use: daily active users (DAU) – bit at position user_id is 1 if user is active that day.
+Key commands:
+
+SETBIT key offset value
+GETBIT key offset
+BITCOUNT key – Count bits set to 1.
+2.2 HyperLogLog (HLL)
+HyperLogLog is a probabilistic data structure that estimates the number of unique elements (cardinality) with very low memory usage and an acceptable error rate.
+Example use: approximate count of daily unique visitors (UV).
+Key commands:
+
+PFADD key element [element ...]
+PFCOUNT key – Get approximate cardinality.
+Analogy:
+Think of HLL as a “smart bucket” that does not remember exactly who entered, but can accurately estimate how many unique people have entered.
+
+3. Step-by-Step Practical Procedure
+Scenario:
+A web application wants to track metrics such as:
+
+Daily Active Users (DAU) using bitmaps.
+Daily Unique Visitors (UV) using HyperLogLog.
+Assume user_id is an integer in a reasonable range (e.g., 0–1,000,000).
+
+3.1 CLI Demo – Bitmaps
+redis-cli
+# Simulate activity on 2026-03-17
+SETBIT analytics:active:2026-03-17 1 1   # user_id=1 active
+SETBIT analytics:active:2026-03-17 42 1  # user_id=42 active
+SETBIT analytics:active:2026-03-17 100 1 # user_id=100 active
+
+# Check if user 42 was active
+GETBIT analytics:active:2026-03-17 42
+
+# Count active users for the day
+BITCOUNT analytics:active:2026-03-17
+3.2 CLI Demo – HyperLogLog
+# Add visits for 2026-03-17
+PFADD analytics:uv:2026-03-17 user1 user2 user3
+PFADD analytics:uv:2026-03-17 user2 user3 user4
+
+# Get approximate unique visitors
+PFCOUNT analytics:uv:2026-03-17
+4. Implementation in Python (Analytics Service)
+Create analytics.py:
+
+import redis
+from typing import Optional
+
+
+class RealtimeAnalytics:
+    """
+    Real-time analytics using Redis bitmaps and HyperLogLog.
+    Tracks:
+      - Daily Active Users (DAU) via bitmaps.
+      - Daily Unique Visitors (UV) via HyperLogLog.
+    """
+
+    def __init__(self, redis_client: Optional[redis.Redis] = None) -> None:
+        self.r = redis_client or redis.Redis(
+            host="127.0.0.1",
+            port=6379,
+            db=0,
+            decode_responses=True,
+        )
+
+    # --------------------
+    # Bitmap-based metrics
+    # --------------------
+    def _dau_key(self, date_str: str) -> str:
+        """
+        Build key for daily active user bitmap.
+        Example date_str: '2026-03-17'.
+        """
+        return f"analytics:dau:{date_str}"
+
+    def mark_user_active(self, date_str: str, user_id: int) -> None:
+        """
+        Mark a user as active for a given day using SETBIT.
+        """
+        if user_id < 0:
+            raise ValueError("user_id must be non-negative")
+
+        key = self._dau_key(date_str)
+        # Set bit at position = user_id
+        self.r.setbit(key, user_id, 1)
+
+    def is_user_active(self, date_str: str, user_id: int) -> bool:
+        """
+        Check whether the user was active on a given day using GETBIT.
+        """
+        key = self._dau_key(date_str)
+        bit_value = self.r.getbit(key, user_id)
+        return bit_value == 1
+
+    def count_daily_active_users(self, date_str: str) -> int:
+        """
+        Count daily active users for the given date using BITCOUNT.
+        """
+        key = self._dau_key(date_str)
+        return self.r.bitcount(key)
+
+    # ------------------------
+    # HyperLogLog-based metrics
+    # ------------------------
+    def _uv_key(self, date_str: str) -> str:
+        """
+        Build key for daily unique visitors HyperLogLog.
+        """
+        return f"analytics:uv:{date_str}"
+
+    def add_visit(self, date_str: str, user_identifier: str) -> None:
+        """
+        Add a visit for a given day in HyperLogLog.
+        user_identifier can be a user_id, session_id, or IP string.
+        """
+        key = self._uv_key(date_str)
+        self.r.pfadd(key, user_identifier)
+
+    def count_unique_visitors(self, date_str: str) -> int:
+        """
+        Get approximate number of unique visitors for the given date using PFCOUNT.
+        """
+        key = self._uv_key(date_str)
+        return self.r.pfcount(key)
+
+
+def demo():
+    analytics = RealtimeAnalytics()
+
+    date = "2026-03-17"
+
+    # Clear previous demo data
+    analytics.r.delete(analytics._dau_key(date))
+    analytics.r.delete(analytics._uv_key(date))
+
+    # Simulate some activity
+    print(f"Simulating activity for {date}...")
+
+    # Users 1, 42, 100 are active
+    analytics.mark_user_active(date, 1)
+    analytics.mark_user_active(date, 42)
+    analytics.mark_user_active(date, 100)
+
+    # Visits (note repeated identifiers)
+    analytics.add_visit(date, "user1")
+    analytics.add_visit(date, "user2")
+    analytics.add_visit(date, "user3")
+    analytics.add_visit(date, "user2")  # duplicate
+    analytics.add_visit(date, "user3")  # duplicate
+    analytics.add_visit(date, "user4")
+
+    # Check a user's activity
+    print("\nIs user 42 active?")
+    print(" ->", analytics.is_user_active(date, 42))
+
+    # Daily active users (exact, from bitmap)
+    dau = analytics.count_daily_active_users(date)
+    print("\nDaily Active Users (DAU):", dau)
+
+    # Unique visitors (approximate, from HyperLogLog)
+    uv = analytics.count_unique_visitors(date)
+    print("Unique Visitors (UV) [approx]:", uv)
+
+
+if __name__ == "__main__":
+    demo()
+Sample Output (Illustrative)
+Simulating activity for 2026-03-17...
+
+Is user 42 active?
+ -> True
+
+Daily Active Users (DAU): 3
+Unique Visitors (UV) [approx]: 4
+5. Exercises, Use Cases, and Pitfalls
+Use Case Extension
+For a streaming platform:
+
+Use bitmaps to track which users watched at least one video per day.
+Use HyperLogLog to track approximate unique viewers per show.
+Students can design keys like:
+
+analytics:dau:2026-03-17
+analytics:uv:show:{show_id}:2026-03-17
+Short Exercises
+Add a method merge_uv(date_str_list) that merges multiple HyperLogLogs into a weekly UV key using PFMERGE. [web:7][web:13]
+Implement an API to compute “stickiness” ratio = DAU / MAU, where MAU (Monthly Active Users) is derived by merging 30 daily HLL keys.
+Write a small CLI script that prints DAU and UV for a given date passed as a command-line argument.
+Common Mistakes
+Using bitmaps for user IDs that are extremely sparse (e.g., very large user IDs) – this wastes memory; advise students to use local indexing or mapping.
+Expecting HyperLogLog to return exact counts – remind that it is approximate but with small error (< 1–2% for typical use).
+Forgetting to set TTL for keys when historical data is not required; this can cause unbounded memory growth.
+Quick Revision Points
+Bitmaps: perfect for boolean per-user/per-day data with constant-time updates and fast aggregate counts. [web:7][web:10]
+HyperLogLog: approximate unique counts with tiny memory footprint; ideal when exact per-user storage is not necessary. [web:13]
+Both structures are write-efficient and fit real-time dashboards and counters frequently queried in web and mobile applications. 
