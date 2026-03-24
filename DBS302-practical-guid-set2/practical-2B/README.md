@@ -1,8 +1,12 @@
 # Practical 2B: Real-Time Analytics with Bitmaps and HyperLogLog
 
-## Overview
+---
 
-This practical exercise demonstrates how to implement real-time user analytics using Redis, leveraging two powerful data structures: **Bitmaps** and **HyperLogLog**. These structures enable efficient tracking of user activities and unique visitor counts with minimal memory footprint.
+## What is the Practical About
+
+### Overview
+
+This practical exercise demonstrates how to implement real-time user analytics using Redis, leveraging two powerful data structures: **Bitmaps** and **HyperLogLog**. The goal is to track user activities and unique visitor counts efficiently with minimal memory footprint, which is critical for modern web applications and analytics platforms.
 
 ---
 
@@ -127,6 +131,46 @@ Returns the approximate count of unique visitors for a date.
 uv = analytics.count_unique_visitors("2026-03-17")  # Returns approximate integer
 ```
 
+### Advanced Analytics Methods (Extensions)
+
+#### 1. `merge_uv(date_str_list, merged_key)`
+
+Merges multiple daily HyperLogLogs into a single key using `PFMERGE`. Perfect for computing weekly or monthly unique visitor counts.
+
+```python
+# Merge 7 days of UV data into a weekly key
+dates = ["2026-03-17", "2026-03-18", "2026-03-19", "2026-03-20",
+         "2026-03-21", "2026-03-22", "2026-03-23"]
+weekly_uv = analytics.merge_uv(dates, "analytics:uv:weekly:2026-03-17")
+print(f"Weekly Unique Visitors: {weekly_uv}")
+```
+
+#### 2. `calculate_monthly_active_users(start_date, num_days)`
+
+Calculates Monthly Active Users (MAU) by merging daily bitmaps using `BITOP OR` operation. Shows total unique users active in the period.
+
+```python
+# Calculate MAU for March 2026
+mau = analytics.calculate_monthly_active_users("2026-03-01", num_days=31)
+print(f"Monthly Active Users: {mau}")
+```
+
+#### 3. `calculate_stickiness(start_date, num_days)`
+
+Computes the **Stickiness Ratio** = Average DAU / MAU. This metric indicates what percentage of monthly active users are engaging daily, showing user engagement level.
+
+```python
+# Calculate user engagement for March 2026
+stickiness = analytics.calculate_stickiness("2026-03-01", num_days=31)
+print(f"Stickiness Ratio: {stickiness:.2%}")  # Shows as percentage
+```
+
+**Interpretation:**
+
+- Stickiness = 0.5 (50%): Half of monthly users engage daily
+- Stickiness = 0.8 (80%): Highly engaged user base
+- Stickiness = 0.2 (20%): Low engagement, many users are sporadic
+
 ---
 
 ## Demonstration Results
@@ -154,9 +198,9 @@ Unique Visitors (UV) [approx]: 4
 
 **Explanation:**
 
-- ✅ User 42 is confirmed as active
-- ✅ **3 unique active users** identified (users 1, 42, 100)
-- ✅ **~4 unique visitors** counted (HLL estimates unique visitors from sessions/identifiers)
+- User 42 is confirmed as active
+- **3 unique active users** identified (users 1, 42, 100)
+- **~4 unique visitors** counted (HLL estimates unique visitors from sessions/identifiers)
 
 ---
 
@@ -198,36 +242,70 @@ Unique Visitors (UV) [approx]: 4
 
 ---
 
-## Extension Exercises
+## Extensions Implemented
 
-### Exercise 1: Weekly HyperLogLog Merge
+All extension exercises from the practical instructions have been **successfully implemented** (COMPLETED):
 
-Implement a method that merges multiple daily HyperLogLogs into a weekly UV count:
+### Extension 1: Weekly HyperLogLog Merge (IMPLEMENTED)
+
+**Status:** IMPLEMENTED  
+**Method:** `merge_uv(date_str_list, merged_key)`
+
+Merges multiple daily HyperLogLogs using `PFMERGE` for weekly/monthly UV counts.
 
 ```python
-def merge_weekly_uv(self, start_date_str, num_days=7):
-    """Merge HyperLogLogs for multiple days to get weekly unique visitors."""
-    keys = [self._uv_key(date) for date in date_range]
-    self.r.pfmerge(f"analytics:uv:weekly:{start_date_str}", *keys)
+# Example: Merge 7 days of data
+dates = ["2026-03-17", "2026-03-18", "2026-03-19", "2026-03-20",
+         "2026-03-21", "2026-03-22", "2026-03-23"]
+weekly_uv = analytics.merge_uv(dates, "analytics:uv:weekly:2026-03-17")
 ```
 
-### Exercise 2: Stickiness Ratio (DAU/MAU)
+### Extension 2: Stickiness Ratio (DAU/MAU) (COMPLETED)
 
-Calculate user engagement by comparing daily active users to monthly active users, indicating what percentage of monthly users are engaging daily.
+**Status:** IMPLEMENTED  
+**Methods:** `calculate_monthly_active_users()` and `calculate_stickiness()`
 
-### Exercise 3: CLI Interface
+Computes user engagement metrics by merging bitmaps (`BITOP OR`) to calculate MAU, then computes DAU/MAU ratio.
 
-Create a command-line tool to query DAU and UV for any date:
+```python
+# Calculate stickiness for a month
+stickiness = analytics.calculate_stickiness("2026-03-01", num_days=31)
+print(f"User Engagement: {stickiness:.2%}")  # e.g., 65.5% daily engagement
+
+# Get MAU count
+mau = analytics.calculate_monthly_active_users("2026-03-01", num_days=31)
+print(f"Monthly Active Users: {mau}")
+```
+
+### Extension 3: CLI Interface (IMPLEMENTED)
+
+**Status:** IMPLEMENTED  
+**Command:** Enhanced `cli_main()` with argument parsing
+
+Full command-line interface for querying analytics metrics:
 
 ```bash
+# Run standard demo
+python analytics.py
+
+# Query all metrics for a specific date
 python analytics.py --date 2026-03-17
+
+# Query only DAU
+python analytics.py --date 2026-03-17 --metric dau
+
+# Query only UV
+python analytics.py --date 2026-03-17 --metric uv
+
+# Run demo simulation for specific date
+python analytics.py --date 2026-03-17 --demo
 ```
 
 ---
 
 ## Common Pitfalls & Best Practices
 
-### ❌ Avoid These Mistakes
+### Avoid These Mistakes
 
 1. **Using bitmaps for extremely sparse user IDs**
    - If your user IDs are 0-1,000,000,000 with only 100 active users, this wastes massive memory
@@ -241,7 +319,7 @@ python analytics.py --date 2026-03-17
    - Without expiration, old analytics keys accumulate indefinitely
    - Use `EXPIRE` or `PEXPIRE` to auto-clean old data
 
-### ✅ Best Practices
+### Best Practices
 
 1. **Use consistent key naming conventions**
    - `analytics:dau:YYYY-MM-DD`
@@ -292,7 +370,7 @@ Daily Active Users (DAU): 3
 Unique Visitors (UV) [approx]: 4
 ```
 
-**Status:** ✅ SUCCESSFUL
+**Status:** SUCCESSFUL
 
 ---
 
@@ -307,7 +385,7 @@ practical-2B/
 └── README.md                # This documentation
 ```
 
-#### Screenshot 2.2: Key Code Sections
+#### Screenshot 2.2: Core Methods Implemented
 
 **RealtimeAnalytics class initialization:**
 
@@ -325,19 +403,102 @@ practical-2B/
 - `PFADD` for adding visitors
 - `PFCOUNT` for approximate counts
 
+#### Screenshot 2.3: Extension Methods Implemented
+
+**Advanced Analytics Methods:**
+
+- `merge_uv()` - Merges multiple daily HLLs using `PFMERGE`
+- `calculate_monthly_active_users()` - Merges daily bitmaps using `BITOP OR`
+- `calculate_stickiness()` - Calculates DAU/MAU engagement ratio
+
+**Command-Line Interface:**
+
+- Enhanced CLI with argparse support
+- Support for date-based queries
+- Metric-specific filtering (DAU, UV)
+- Demo simulation mode for any date
+
+#### Screenshot 2.4: CLI Interface Testing - All Modes (VERIFIED)
+
+**Test 1: Standard Demo Mode**
+
+```bash
+$ python analytics.py
+
+Simulating activity for 2026-03-17...
+
+Is user 42 active?
+ -> True
+
+Daily Active Users (DAU): 3
+Unique Visitors (UV) [approx]: 4
+```
+
+**Test 2: Query All Metrics for a Date**
+
+```bash
+$ python analytics.py --date 2026-03-17
+
+============================================================
+Analytics Metrics for 2026-03-17
+============================================================
+Daily Active Users (DAU):        3
+Unique Visitors (UV) [approx]:   4
+============================================================
+```
+
+**Test 3: Query DAU Only**
+
+```bash
+$ python analytics.py --date 2026-03-17 --metric dau
+
+Daily Active Users (DAU) for 2026-03-17: 3
+```
+
+**Test 4: Query UV Only**
+
+```bash
+$ python analytics.py --date 2026-03-17 --metric uv
+
+Unique Visitors (UV) [approx] for 2026-03-17: 4
+```
+
+**Test 5: Run Demo Simulation for Specific Date**
+
+```bash
+$ python analytics.py --date 2026-03-17 --demo
+
+============================================================
+Running demo simulation for 2026-03-17
+============================================================
+
+Simulating activity for 2026-03-17...
+
+Is user 42 active on 2026-03-17?
+ -> True
+
+Daily Active Users (DAU): 3
+Unique Visitors (UV) [approx]: 4
+```
+
+**CLI Status:** ALL MODES WORKING PERFECTLY
+
 ---
 
 ## Verification Checklist
 
-| Task                               | Status | Evidence                                        |
-| ---------------------------------- | ------ | ----------------------------------------------- |
-| Understand bitmap concepts         | ✅     | Implemented SETBIT, GETBIT, BITCOUNT operations |
-| Understand HyperLogLog concepts    | ✅     | Implemented PFADD, PFCOUNT operations           |
-| Create analytics service           | ✅     | RealtimeAnalytics class with 5 methods          |
-| Demonstrate bitmap operations      | ✅     | DAU tracking working correctly                  |
-| Demonstrate HyperLogLog operations | ✅     | UV counting working correctly                   |
-| Test with demo data                | ✅     | All outputs as expected                         |
-| Create documentation               | ✅     | This README.md file                             |
+| Task                                         | Status    | Evidence                                        |
+| -------------------------------------------- | --------- | ----------------------------------------------- |
+| Understand bitmap concepts                   | COMPLETED | Implemented SETBIT, GETBIT, BITCOUNT operations |
+| Understand HyperLogLog concepts              | COMPLETED | Implemented PFADD, PFCOUNT operations           |
+| Create basic analytics service               | COMPLETED | RealtimeAnalytics class with 5 methods          |
+| Demonstrate bitmap operations                | COMPLETED | DAU tracking working correctly                  |
+| Demonstrate HyperLogLog operations           | COMPLETED | UV counting working correctly                   |
+| Test with demo data                          | COMPLETED | All outputs as expected                         |
+| **Implement weekly UV merge (Extension 1)**  | COMPLETED | `merge_uv()` method using PFMERGE               |
+| **Implement stickiness ratio (Extension 2)** | COMPLETED | `calculate_stickiness()` computing DAU/MAU      |
+| **Implement CLI interface (Extension 3)**    | COMPLETED | Enhanced CLI with date/metric queries           |
+| Create comprehensive documentation           | COMPLETED | This README.md file with all details            |
 
 ---
 
@@ -352,7 +513,8 @@ practical-2B/
 **Redis Commands Used:**
 
 - `SETBIT`, `GETBIT`, `BITCOUNT` (Bitmap operations)
-- `PFADD`, `PFCOUNT` (HyperLogLog operations)
+- `PFADD`, `PFCOUNT`, `PFMERGE` (HyperLogLog operations)
+- `BITOP` (Bitmap merging for MAU calculation)
 - `DELETE` (Cleanup)
 
 **Programming Language:** Python 3.x
@@ -362,13 +524,129 @@ practical-2B/
 - `redis-py` (Python Redis client)
 - Redis server (local: localhost:6379)
 
+**Methods Count:** 8 total
+
+- Core methods: 5 (mark_user_active, is_user_active, count_daily_active_users, add_visit, count_unique_visitors)
+- Extension methods: 3 (merge_uv, calculate_monthly_active_users, calculate_stickiness)
+
+---
+
+## Summary of Implementation & Enhancements
+
+### Core Requirements (COMPLETED)
+
+All foundational requirements from the practical instructions have been implemented:
+
+- Bitmap-based Daily Active User (DAU) tracking using SETBIT/GETBIT/BITCOUNT (COMPLETED)
+- HyperLogLog-based Unique Visitor (UV) counting using PFADD/PFCOUNT (COMPLETED)
+- Full `RealtimeAnalytics` class with core methods (COMPLETED)
+- Demonstrated with working examples (COMPLETED)
+- Comprehensive documentation (COMPLETED)
+
+### Extensions (ALL 3 IMPLEMENTED)
+
+#### Extension 1: Weekly HyperLogLog Merge (COMPLETED)
+
+**Method:** `merge_uv(date_str_list, merged_key)`
+
+- Uses Redis `PFMERGE` command to combine multiple daily HyperLogLogs
+- Enables weekly, monthly, or custom period UV calculations
+- Maintains probabilistic accuracy across merged HLLs
+
+```python
+# Example: Calculate weekly unique visitors
+weekly_uv = analytics.merge_uv(["2026-03-17", "2026-03-18", ...],
+                                "analytics:uv:weekly:2026-03-17")
+```
+
+#### Extension 2: Stickiness Ratio & MAU Calculation (COMPLETED)
+
+**Methods:**
+
+- `calculate_monthly_active_users(start_date, num_days)`
+- `calculate_stickiness(start_date, num_days)`
+
+**Features:**
+
+- Uses Redis `BITOP OR` to merge multiple daily bitmaps
+- Calculates MAU by combining all daily active user records
+- Computes stickiness ratio = Average DAU / MAU
+- Shows user engagement percentage
+
+```python
+# Example: Calculate monthly engagement
+mau = analytics.calculate_monthly_active_users("2026-03-01", 31)
+stickiness = analytics.calculate_stickiness("2026-03-01", 31)
+print(f"Engagement: {stickiness:.2%}")  # e.g., "Engagement: 65.5%"
+```
+
+#### Extension 3: CLI Interface (COMPLETED)
+
+**Enhanced:** Command-line argument parsing with `argparse`
+
+**Supported Commands:**
+
+```bash
+# Standard demo
+python analytics.py
+
+# Query all metrics for a date
+python analytics.py --date 2026-03-17
+
+# Query specific metrics
+python analytics.py --date 2026-03-17 --metric dau
+python analytics.py --date 2026-03-17 --metric uv
+
+# Run demo for a specific date
+python analytics.py --date 2026-03-17 --demo
+
+# Help
+python analytics.py --help
+```
+
+---
+
+## Implementation Statistics
+
+| Aspect                  | Details                                                      |
+| ----------------------- | ------------------------------------------------------------ |
+| **Total Methods**       | 8 (5 core + 3 extensions)                                    |
+| **Redis Commands Used** | 7 (SETBIT, GETBIT, BITCOUNT, PFADD, PFCOUNT, PFMERGE, BITOP) |
+| **Code Quality**        | Full docstrings, type hints, error handling                  |
+| **CLI Support**         | Full argparse integration with help text                     |
+| **Documentation**       | Comprehensive README with examples                           |
+| **Testing**             | All methods tested and verified                              |
+
 ---
 
 ## Conclusion
 
-This practical exercise successfully demonstrates how modern analytics systems leverage specialized Redis data structures to efficiently track user metrics at scale. Bitmaps provide exact user activity tracking with constant-time operations, while HyperLogLog enables approximate unique counting with minimal memory overhead. Together, these structures form the backbone of real-time analytics dashboards used by major technology platforms worldwide.
+This practical exercise successfully demonstrates how modern analytics systems leverage specialized Redis data structures to efficiently track user metrics at scale.
+
+**Core Implementation:** Bitmaps provide exact user activity tracking with constant-time operations, while HyperLogLog enables approximate unique counting with minimal memory overhead.
+
+**Extensions:** The implementation goes beyond basic requirements by providing:
+
+1. **Advanced aggregation capabilities** via HLL merging for arbitrary time periods
+2. **Engagement metrics** through stickiness ratio calculation using bitmap operations
+3. **Production-ready CLI interface** for querying and analyzing metrics
+
+Together, these structures form the backbone of real-time analytics dashboards used by major technology platforms worldwide, enabling efficient tracking of DAU, MAU, and visitor metrics at scale.
 
 ---
 
+## Final Status
+
+| Aspect                         | Status    |
+| ------------------------------ | --------- |
+| Core Requirements              | COMPLETED |
+| Extension 1 (Weekly UV Merge)  | COMPLETED |
+| Extension 2 (Stickiness Ratio) | COMPLETED |
+| Extension 3 (CLI Interface)    | COMPLETED |
+| Documentation                  | COMPLETED |
+| Testing & Verification         | COMPLETED |
+
+**Overall Status:** FULLY COMPLETED (Core + All Extensions)
+
 **Completion Date:** March 24, 2026  
-**Status:** Completed Successfully ✅
+**Last Updated:** March 24, 2026
