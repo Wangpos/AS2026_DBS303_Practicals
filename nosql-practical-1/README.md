@@ -2,11 +2,11 @@
 
 ## Practical 1: Setting Up Redis, MongoDB, and Cassandra — Implementing a Social Media Data Model and Contrasting Query Patterns
 
-**Institution:** [Your University Name]  
+**Institution:** College of Science and Technology 
 **Module Code:** DBS302  
 **Practical Number:** 1  
 **Date Submitted:** 15 May 2026  
-**Total Marks Allocated:** 40
+
 
 ---
 
